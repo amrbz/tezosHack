@@ -1,30 +1,49 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+#Tezos Hack
 
-## Getting Started
+## Chainify
 
-First, run the development server:
 
-```bash
-npm run dev
-# or
-yarn dev
+Smart contract:
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+import smartpy as sp
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+class AtomicSwap(sp.Contract):
+    def __init__(self, notional, epoch, hashedSecret, owner, counterparty):
+        self.init(notional     = notional,
+                  hashedSecret = hashedSecret,
+                  epoch        = epoch,
+                  owner        = owner,
+                  counterparty = counterparty)
 
-## Learn More
+    def checkAlive(self, identity):
+        sp.verify(self.data.notional != sp.mutez(0))
+        sp.verify(identity == sp.sender)
 
-To learn more about Next.js, take a look at the following resources:
+    def finish(self):
+        self.data.notional = sp.mutez(0)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+    @sp.entry_point
+    def allSigned(self, params):
+        self.checkAlive(self.data.owner)
+        sp.send(self.data.counterparty, self.data.notional)
+        self.finish()
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+    @sp.entry_point
+    def cancelSwap(self, params):
+        self.checkAlive(self.data.owner)
+        sp.verify(self.data.epoch < sp.now)
+        sp.send(self.data.owner, self.data.notional)
+        self.finish()
 
-## Deploy on Vercel
+    @sp.entry_point
+    def knownSecret(self, params):
+        self.checkAlive(self.data.counterparty)
+        sp.verify(self.data.hashedSecret == sp.blake2b(params.secret))
+        sp.send(self.data.counterparty, self.data.notional)
+        self.finish()
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/import?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+                  
+sp.add_compilation_target("atomicSwap", AtomicSwap(sp.mutez(12),sp.timestamp(50),sp.bytes("0x536f6d6553656563726574"), sp.address("tz1edeU3QZm88Z4P6Q4MaXGrbpMdatwG1oWG"), sp.address("tz1YtPfqVEjsbjogVsKv2mEWYvzLbgdivGj1")))
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+```
